@@ -1,0 +1,34 @@
+{
+  "name": "cital",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "SaaS de agendamiento y reservas online para pymes de servicios",
+  "scripts": {
+    "dev": "concurrently -n wrangler,vite -c blue,green \"wrangler dev\" \"npm run dev -w web\"",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run build -w web",
+    "deploy": "npm run build && wrangler deploy",
+    "test": "vitest run",
+    "db:create": "wrangler d1 create cital",
+    "db:migrate:local": "wrangler d1 migrations apply cital --local",
+    "db:migrate:remote": "wrangler d1 migrations apply cital --remote",
+    "db:studio:local": "wrangler d1 execute cital --local --command \"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\""
+  },
+  "workspaces": [
+    "web"
+  ],
+  "dependencies": {
+    "drizzle-orm": "^0.44.0",
+    "hono": "^4.6.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.19",
+    "@cloudflare/workers-types": "^5.20261019.1",
+    "concurrently": "^9.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "~3.0.0",
+    "wrangler": "^4.0.0"
+  }
+}
