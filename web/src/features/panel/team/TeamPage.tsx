@@ -1,12 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { MoreHorizontal, Plus, Pencil, Trash2, UserCog, CalendarClock } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router'
+import { CalendarCheck, MoreHorizontal, Plus, Pencil, Trash2, UserCog } from 'lucide-react'
 import { ApiError } from '@/lib/api'
 import { initialsOf } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { DEFAULT_ENTITY_COLOR } from '@/lib/brand'
 import {
+  useConnectGoogle,
   useDeleteProfessional,
+  useDisconnectGoogle,
   useProfessionals,
   useSaveProfessional,
   useServices,
@@ -42,6 +46,31 @@ export function TeamPage() {
   const [editing, setEditing] = useState<Professional | null>(null)
   const [deleting, setDeleting] = useState<Professional | null>(null)
   const remove = useDeleteProfessional()
+  const connect = useConnectGoogle()
+
+  // Resultado del flujo OAuth de Google (?google=connected|denied|...)
+  const [params, setParams] = useSearchParams()
+  const qc = useQueryClient()
+  useEffect(() => {
+    const google = params.get('google')
+    if (!google) return
+    if (google === 'connected') {
+      toast.success('Google Calendar conectado ✅', {
+        description: 'Las citas de este profesional se sincronizarán',
+      })
+      qc.invalidateQueries({ queryKey: ['professionals'] })
+    } else if (google === 'denied') {
+      toast.error('No se autorizó el acceso a Google Calendar')
+    } else if (google === 'expired' || google === 'invalid') {
+      toast.error('La conexión expiró. Intenta conectar de nuevo')
+    } else if (google === 'misconfigured') {
+      toast.error('Google Calendar no está configurado en el servidor')
+    } else {
+      toast.error('No se pudo conectar con Google Calendar')
+    }
+    setParams({}, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params])
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -128,6 +157,42 @@ export function TeamPage() {
                     ))
                   )}
                 </div>
+                <div className="mt-3 flex items-center gap-2 border-t border-border/50 pt-3">
+                  {p.googleConnected ? (
+                    <>
+                      <Badge variant="outline" className="gap-1.5 font-normal">
+                        <CalendarCheck className="size-3.5 text-green-600 dark:text-green-400" />
+                        Google Calendar
+                      </Badge>
+                      <span className="truncate text-[13px] text-muted-foreground">
+                        {p.googleEmail || 'Conectado'}
+                      </span>
+                      <DisconnectGoogleButton id={p.id} name={p.name} />
+                    </>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-[13px] font-normal text-muted-foreground"
+                      disabled={connect.isPending}
+                      onClick={async () => {
+                        try {
+                          const { authUrl } = await connect.mutateAsync(p.id)
+                          window.location.href = authUrl // Connect Link de Composio
+                        } catch (err) {
+                          toast.error(
+                            err instanceof ApiError
+                              ? err.message
+                              : 'No se pudo iniciar la conexión con Google Calendar',
+                          )
+                        }
+                      }}
+                    >
+                      <Plus className="size-3.5" />
+                      {connect.isPending ? 'Conectando…' : 'Conectar Google Calendar'}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -163,6 +228,40 @@ export function TeamPage() {
         }}
       />
     </div>
+  )
+}
+
+function DisconnectGoogleButton({ id, name }: { id: string; name: string }) {
+  const disconnect = useDisconnectGoogle()
+  const [confirming, setConfirming] = useState(false)
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="ml-auto text-[13px] font-normal text-muted-foreground"
+        onClick={() => setConfirming(true)}
+      >
+        Desconectar
+      </Button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="¿Desconectar Google Calendar?"
+        description={`Las citas de "${name}" dejarán de sincronizarse con Google. Sus horarios personales dejaron de bloquear reservas.`}
+        confirmLabel="Desconectar"
+        loading={disconnect.isPending}
+        onConfirm={async () => {
+          try {
+            await disconnect.mutateAsync(id)
+            toast.success('Google Calendar desconectado', { description: name })
+            setConfirming(false)
+          } catch (err) {
+            toast.error(err instanceof ApiError ? err.message : 'No se pudo desconectar')
+          }
+        }}
+      />
+    </>
   )
 }
 

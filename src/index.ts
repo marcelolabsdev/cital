@@ -4,6 +4,7 @@ import { errorHandler } from './middleware/errors'
 import { authRoutes } from './routes/auth'
 import { panelRoutes } from './routes/panel'
 import { publicRoutes } from './routes/public'
+import { googleCallbackRoutes } from './routes/google'
 import { createDb } from './db/client'
 import { createMailer } from './lib/email/mailer'
 import { sendDueReminders } from './core/notifications/service'
@@ -15,6 +16,8 @@ app.onError(errorHandler)
 app.route('/api/auth', authRoutes)
 app.route('/api/panel', panelRoutes)
 app.route('/api/public', publicRoutes)
+// Callback público de Google OAuth (sin sesión; el state en KV lleva el contexto)
+app.route('/api/google', googleCallbackRoutes)
 
 app.notFound((c) =>
   c.json({ error: { code: 'not_found', message: 'Ruta no encontrada' } }, 404),

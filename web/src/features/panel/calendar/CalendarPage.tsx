@@ -84,7 +84,12 @@ export function CalendarPage() {
     return { from: fmtDay(first), to: fmtDay(last) }
   }, [anchor, view])
 
-  const { data: appts, isLoading } = useAppointments(from, to)
+  const { data: apptsRaw, isLoading } = useAppointments(from, to)
+  // Solo la agenda vigente: las canceladas/no-show no se pintan (el slot queda libre)
+  const appts = useMemo(
+    () => (apptsRaw ?? []).filter((a) => a.status !== 'cancelled' && a.status !== 'no_show'),
+    [apptsRaw],
+  )
 
   function shift(delta: number) {
     const d = new Date(anchor)

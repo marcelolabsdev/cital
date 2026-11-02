@@ -85,6 +85,21 @@ export const professionals = sqliteTable(
   (t) => [index('idx_professionals_tenant').on(t.tenantId)],
 )
 
+/** Conexión de calendario externo (ej. Google Calendar vía Composio), una por profesional. */
+export const calendarConnections = sqliteTable(
+  'calendar_connections',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id').notNull(),
+    professionalId: text('professional_id').notNull().unique(),
+    provider: text('provider').notNull().default('composio'),
+    connectedAccountId: text('connected_account_id').notNull(),
+    accountEmail: text('account_email'),
+    connectedAt: text('connected_at').notNull(),
+  },
+  (t) => [index('idx_calconn_tenant').on(t.tenantId)],
+)
+
 export const professionalServices = sqliteTable(
   'professional_services',
   {
@@ -162,6 +177,7 @@ export const appointments = sqliteTable(
     source: text('source').notNull().default('public'),
     manageToken: text('manage_token').notNull().unique(),
     reminderSentAt: text('reminder_sent_at'),
+    googleEventId: text('google_event_id'),
     cancelledAt: text('cancelled_at'),
     cancelReason: text('cancel_reason'),
     createdAt: text('created_at').notNull(),

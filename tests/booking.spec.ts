@@ -266,3 +266,48 @@ describe('createBooking — buffer y aislamiento multi-tenant', () => {
     expect(rowsA[0]!.id).not.toBe(rowsB[0]!.id)
   })
 })
+
+describe('createBooking — cita manual del panel', () => {
+  it('el panel puede agendar fuera del horario semanal y en minutos fuera de grilla', async () => {
+    const seed = await seedTenant('test-panel')
+    const { dateStr } = tomorrowAt10()
+    // 07:00 (antes de abrir) — sería rechazado en la página pública
+    const at0700 = toIso(zonedToUtc(dateStr, 420, TZ))
+    // 19:47 (minuto no alineado a la grilla de 15)
+    const at1947 = toIso(zonedToUtc(dateStr, 1187, TZ))
+
+    for (const [i, startIso] of [at0700, at1947].entries()) {
+      const r = await createBooking(testDb(), env.DB, {
+        ...bookingInput(seed, startIso, `panel${i}`),
+        source: 'panel',
+      })
+      expect(r.ok).toBe(true)
+    }
+
+    // El público sigue estricto: 07:00 no es slot ofertado
+    const tenant = await tenantBySlug(seed.slug)
+    const slots = await getAvailability(testDb(), tenant, seed.serviceId, dateStr, dateStr, seed.professionalId)
+    const starts = slots.map((s) => s.startIso)
+    expect(starts).not.toContain(at0700)
+  })
+
+  it('en el panel el solape con otra cita sigue bloqueado', async () => {
+    const seed = await seedTenant('test-panel-conflict')
+    const { dateStr } = tomorrowAt10()
+    const at1000 = toIso(zonedToUtc(dateStr, 600, TZ))
+
+    const first = await createBooking(testDb(), env.DB, {
+      ...bookingInput(seed, at1000, 'p1'),
+      source: 'panel',
+    })
+    expect(first.ok).toBe(true)
+
+    const second = await createBooking(testDb(), env.DB, {
+      ...bookingInput(seed, toIso(zonedToUtc(dateStr, 615, TZ)), 'p2'),
+      source: 'panel',
+    })
+    expect(second.ok).toBe(false)
+    expect(second.code).toBe('conflict')
+    expect(second.message).toContain('Se solapa')
+  })
+})

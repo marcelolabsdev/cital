@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray } from 'drizzle-orm'
 import type { Db } from '../client'
 import { professionalServices, professionals, services } from '../schema'
+import { nowIso } from '../../lib/ids'
 
 export interface ProfessionalRow {
   id: string

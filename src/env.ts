@@ -11,6 +11,7 @@ export interface Env {
   TURNSTILE_SECRET_KEY?: string
   TURNSTILE_SITE_KEY?: string
   PUBLIC_APP_URL?: string
+  COMPOSIO_API_KEY?: string
 }
 
 export interface AuthInfo {

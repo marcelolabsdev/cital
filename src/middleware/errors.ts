@@ -28,6 +28,10 @@ export function conflict(message: string): AppError {
   return new AppError(409, 'conflict', message)
 }
 
+export function serviceUnavailable(message: string): AppError {
+  return new AppError(503, 'service_unavailable', message)
+}
+
 export async function errorHandler(err: Error, c: Context<HonoEnv>) {
   if (err instanceof AppError) {
     return c.json({ error: { code: err.code, message: err.message } }, err.status as 400)

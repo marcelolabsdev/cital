@@ -1,11 +1,11 @@
 /**
  * Creación de reservas con protección anti doble-reserva.
  *
- * La validación de horario se hace recomputando la disponibilidad real del
- * profesional para esa fecha (horario semanal, bloqueos, feriados, buffer,
- * anticipación mínima) y exigiendo que el horario solicitado sea un slot
- * ofertado. La condición de carrera la cierra un INSERT atómico con
- * NOT EXISTS: una sola sentencia, sin ventana de conflicto en D1.
+ * La página pública exige que el horario solicitado sea un slot ofertado por
+ * el motor de disponibilidad (horario semanal, bloqueos, feriados, buffer,
+ * anticipación mínima). El panel salta esa validación: el staff agenda fuera
+ * del horario estándar y solo respeta el anti-solape. La condición de carrera
+ * la cierra un INSERT atómico con NOT EXISTS para ambos casos.
  */
 
 import { and, eq, inArray } from 'drizzle-orm'
@@ -109,10 +109,15 @@ export async function createBooking(
   const local = zonedParts(new Date(startMs), tenant.timezone)
   const localDate = local.dateStr
 
-  // 4) El horario debe ser un slot realmente ofertado
-  const slots = await getAvailability(db, tenant, serviceId, localDate, localDate, professionalId)
-  if (!slots.some((s) => s.startIso === toIso(new Date(startMs)))) {
-    return { ok: false, code: 'slot_unavailable', message: 'Ese horario ya no está disponible' }
+  // 4) Validación de slot. La página pública exige que el horario sea un slot
+  //    real del motor (grilla del horario semanal). El panel no: el staff
+  //    puede agendar fuera del horario o minutos libres (estándar en Fresha,
+  //    Booksy), y el INSERT atómico del paso 6 sigue bloqueando solapes.
+  if (input.source !== 'panel') {
+    const slots = await getAvailability(db, tenant, serviceId, localDate, localDate, professionalId)
+    if (!slots.some((s) => s.startIso === toIso(new Date(startMs)))) {
+      return { ok: false, code: 'slot_unavailable', message: 'Ese horario ya no está disponible' }
+    }
   }
 
   const endIso = toIso(new Date(startMs + service.durationMinutes * 60_000))
@@ -177,7 +182,14 @@ export async function createBooking(
   }
 
   if ((result.meta.changes ?? 0) === 0) {
-    return { ok: false, code: 'conflict', message: 'Alguien acaba de reservar este horario' }
+    return {
+      ok: false,
+      code: 'conflict',
+      message:
+        input.source === 'panel'
+          ? 'Se solapa con otra cita de ese profesional'
+          : 'Alguien acaba de reservar ese horario',
+    }
   }
 
   return {

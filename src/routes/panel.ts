@@ -14,6 +14,7 @@ import { blockRoutes } from './panel/blocks'
 import { panelAppointmentRoutes } from './panel/appointments'
 import { customerRoutes } from './panel/customers'
 import { dashboardRoutes } from './panel/dashboard'
+import { googlePanelRoutes } from './panel/google'
 
 export const panelRoutes = new Hono<HonoEnv>()
 
@@ -25,6 +26,7 @@ panelRoutes.route('/blocks', blockRoutes)
 panelRoutes.route('/appointments', panelAppointmentRoutes)
 panelRoutes.route('/customers', customerRoutes)
 panelRoutes.route('/dashboard', dashboardRoutes)
+panelRoutes.route('/google', googlePanelRoutes)
 
 const TIMEZONES = new Set(['America/Santiago', 'America/Punta_Arenas', 'America/EasterIsland'])
 

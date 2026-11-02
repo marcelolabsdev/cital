@@ -42,11 +42,20 @@ export function NewAppointmentDialog({
 
   const activeServices = (services ?? []).filter((s) => s.isActive)
   const activeTeam = (team ?? []).filter((p) => p.isActive)
+  // Solo profesionales que ofrecen el servicio elegido; si ninguno lo ofrece
+  // se cae al listado completo (el backend rechazará con un mensaje claro).
+  const eligibleTeam = activeTeam.filter((p) => serviceId && p.serviceIds.includes(serviceId))
+  const teamOptions = eligibleTeam.length > 0 ? eligibleTeam : activeTeam
 
   useEffect(() => {
     if (open) {
-      setServiceId(activeServices[0]?.id ?? '')
-      setProfessionalId(activeTeam[0]?.id ?? '')
+      const firstService = activeServices[0]?.id ?? ''
+      setServiceId(firstService)
+      // Primer profesional que ofrezca el servicio por defecto
+      const firstEligible =
+        activeTeam.find((p) => firstService && p.serviceIds.includes(firstService)) ??
+        activeTeam[0]
+      setProfessionalId(firstEligible?.id ?? '')
       setDate(presetSlot?.date ?? new Date().toISOString().slice(0, 10))
       setTime(
         presetSlot
@@ -60,6 +69,18 @@ export function NewAppointmentDialog({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, presetSlot])
+
+  /** Al cambiar de servicio, si el profesional actual no lo ofrece, elige uno que sí. */
+  function onServiceChange(nextServiceId: string) {
+    setServiceId(nextServiceId)
+    const current = activeTeam.find((p) => p.id === professionalId)
+    if (!current || !current.serviceIds.includes(nextServiceId)) {
+      const next =
+        activeTeam.find((p) => nextServiceId && p.serviceIds.includes(nextServiceId)) ??
+        activeTeam[0]
+      setProfessionalId(next?.id ?? '')
+    }
+  }
 
   async function submit() {
     if (customerName.trim().length < 2) {
@@ -106,7 +127,7 @@ export function NewAppointmentDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="na-service">Servicio</Label>
-            <NativeSelect id="na-service" value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
+            <NativeSelect id="na-service" value={serviceId} onChange={(e) => onServiceChange(e.target.value)}>
               {activeServices.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} ({s.durationMinutes} min)
@@ -118,7 +139,7 @@ export function NewAppointmentDialog({
           <div className="grid gap-2">
             <Label htmlFor="na-pro">Profesional</Label>
             <NativeSelect id="na-pro" value={professionalId} onChange={(e) => setProfessionalId(e.target.value)}>
-              {activeTeam.map((p) => (
+              {teamOptions.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>

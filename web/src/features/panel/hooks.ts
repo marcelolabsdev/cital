@@ -61,6 +61,8 @@ export interface Professional {
   color: string | null
   isActive: boolean
   serviceIds: string[]
+  googleConnected?: boolean
+  googleEmail?: string | null
 }
 
 export interface ProfessionalInput {
@@ -96,6 +98,23 @@ export function useDeleteProfessional() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => api(`/api/panel/professionals/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['professionals'] }),
+  })
+}
+
+export function useConnectGoogle() {
+  // El { authUrl } viene del backend; quien maneja onSuccess hace window.location.href
+  return useMutation({
+    mutationFn: (professionalId: string) =>
+      api<{ authUrl: string }>(`/api/panel/google/connect?professionalId=${professionalId}`),
+  })
+}
+
+export function useDisconnectGoogle() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (professionalId: string) =>
+      api(`/api/panel/google/connection/${professionalId}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['professionals'] }),
   })
 }

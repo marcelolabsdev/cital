@@ -13,9 +13,30 @@ import {
   replaceProfessionalServices,
   updateProfessional,
 } from '../../db/repos/professionals'
+import {
+  getConnectionForProfessional,
+  listConnections,
+} from '../../db/repos/calendarConnections'
 import { newId, nowIso } from '../../lib/ids'
+import type { ProfessionalRow } from '../../db/repos/professionals'
 
 export const professionalRoutes = new Hono<HonoEnv>()
+
+/** Proyecta un profesional para el frontend: estado de calendario sí, ids internos no. */
+function toClient(p: ProfessionalRow, conn: { accountEmail: string | null } | null) {
+  return {
+    id: p.id,
+    name: p.name,
+    email: p.email,
+    phone: p.phone,
+    bio: p.bio,
+    color: p.color,
+    isActive: p.isActive,
+    googleConnected: !!conn,
+    googleEmail: conn?.accountEmail ?? null,
+    serviceIds: [] as string[],
+  }
+}
 
 const professionalBody = z
   .object({
@@ -35,7 +56,20 @@ const professionalBody = z
 
 professionalRoutes.get('/', async (c) => {
   const db = createDb(c.env.DB)
-  return c.json({ professionals: await listProfessionals(db, c.get('auth').tenantId) })
+  const tenantId = c.get('auth').tenantId
+  const [rows, connections] = await Promise.all([
+    listProfessionals(db, tenantId),
+    listConnections(db, tenantId),
+  ])
+  const byProfessional = new Map(
+    connections.map((conn) => [conn.professionalId, conn]),
+  )
+  return c.json({
+    professionals: rows.map((p) => ({
+      ...toClient(p as unknown as ProfessionalRow, byProfessional.get(p.id) ?? null),
+      serviceIds: p.serviceIds,
+    })),
+  })
 })
 
 professionalRoutes.post('/', async (c) => {
@@ -66,7 +100,9 @@ professionalRoutes.post('/', async (c) => {
     },
     serviceIds,
   )
-  return c.json({ professional: await getProfessional(db, tenantId, id) }, 201)
+  const created = (await getProfessional(db, tenantId, id)) as ProfessionalRow | null
+  const conn = created ? await getConnectionForProfessional(db, tenantId, id) : null
+  return c.json({ professional: created ? { ...toClient(created, conn), serviceIds } : null }, 201)
 })
 
 professionalRoutes.patch('/:id', async (c) => {
@@ -88,7 +124,11 @@ professionalRoutes.patch('/:id', async (c) => {
   if (Object.keys(patch).length > 0) {
     await updateProfessional(db, tenantId, id, patch)
   }
-  return c.json({ professional: await getProfessional(db, tenantId, id) })
+  const updated = (await getProfessional(db, tenantId, id)) as ProfessionalRow | null
+  const conn = updated ? await getConnectionForProfessional(db, tenantId, id) : null
+  return c.json({
+    professional: updated ? { ...toClient(updated, conn), serviceIds: body.serviceIds ?? [] } : null,
+  })
 })
 
 professionalRoutes.delete('/:id', async (c) => {
