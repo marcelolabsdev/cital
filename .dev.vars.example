@@ -1,0 +1,21 @@
+# Plantilla de variables locales (copiar a .dev.vars — NO versionar el .dev.vars)
+#
+#   cp .dev.vars.example .dev.vars
+#
+# En producción los secretos van por `npx wrangler secret put <NOMBRE>`.
+
+# Firma de sesiones (obligatoria). Genera una con: openssl rand -hex 32
+SESSION_SECRET=cambia-esto-por-un-secreto-largo-y-aleatorio
+
+# Proveedor de email: "log" (dev, se registra en consola) o "resend" (prod)
+EMAIL_PROVIDER=log
+
+# API key de Composio (Google Calendar). Se obtiene en app.composio.dev → Settings → API keys
+# Sin esta variable, conectar Google Calendar queda deshabilitado.
+COMPOSIO_API_KEY=
+
+# Opcionales (solo producción):
+# RESEND_API_KEY=
+# TURNSTILE_SECRET_KEY=
+# TURNSTILE_SITE_KEY=
+# PUBLIC_APP_URL=https://tu-dominio.example
