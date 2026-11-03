@@ -106,7 +106,7 @@ export async function syncAppointment(
     // CREATE: solo para citas vigentes. DELETE: no importa el estado — la cita
     // puede haber quedado cancelada (move/reprogramación) y su evento va igual.
     if (op === 'create' && (appt.status === 'cancelled' || appt.status === 'no_show')) return false
-    if (!appt.googleEventId) return false
+    if (op === 'delete' && !appt.googleEventId) return false
 
     const conn = await getConnectionForProfessional(db, tenantId, appt.professionalId)
     if (!conn) return false
