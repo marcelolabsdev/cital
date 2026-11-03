@@ -3,6 +3,8 @@ import { env, testDb } from './setup'
 import { eq } from 'drizzle-orm'
 import { appointments, professionals, schedules, services, tenants } from '../src/db/schema'
 import { createBooking } from '../src/core/booking/service'
+import { syncAppointment, toLocalStamp } from '../src/core/gcalendar/sync'
+import { calendarConnections } from '../src/db/schema'
 import { getAvailability } from '../src/core/availability/service'
 import { getTenantBySlug } from '../src/db/repos/tenants'
 import { newId, nowIso } from '../src/lib/ids'
@@ -309,5 +311,50 @@ describe('createBooking — cita manual del panel', () => {
     expect(second.ok).toBe(false)
     expect(second.code).toBe('conflict')
     expect(second.message).toContain('Se solapa')
+  })
+})
+
+describe('gcalendar — sync best-effort', () => {
+  it('toLocalStamp convierte un instante UTC a la pared local de Santiago', () => {
+    const { dateStr, startIso } = tomorrowAt10()
+    expect(toLocalStamp(startIso, TZ)).toBe(`${dateStr}T10:00:00`)
+  })
+
+  it('sin COMPOSIO_API_KEY no sincroniza y no toca google_event_id', async () => {
+    const seed = await seedTenant('test-gcal')
+    const { startIso } = tomorrowAt10()
+    const r = await createBooking(testDb(), env.DB, bookingInput(seed, startIso, 'g1'))
+    expect(r.ok).toBe(true)
+
+    const db = testDb()
+    await db.insert(calendarConnections).values({
+      id: newId(),
+      tenantId: seed.tenantId,
+      professionalId: seed.professionalId,
+      provider: 'composio',
+      connectedAccountId: 'acc_test',
+      accountEmail: 'test@example.com',
+      connectedAt: nowIso(),
+    })
+
+    /** El env de pruebas no define COMPOSIO_API_KEY (justo lo que este test verifica). */
+    const ok = await syncAppointment(env as { COMPOSIO_API_KEY?: string }, db, TZ, r.appointment!.id, seed.tenantId, 'create')
+    expect(ok).toBe(false)
+
+    const row = await db
+      .select({ g: appointments.googleEventId })
+      .from(appointments)
+      .where(eq(appointments.id, r.appointment!.id))
+    expect(row).toHaveLength(1)
+    expect(row[0]!.g).toBeNull()
+  })
+
+  it('sin conexión de calendario, sync debe ser no-op silencioso', async () => {
+    const seed = await seedTenant('test-gcal-noconn')
+    const { startIso } = tomorrowAt10()
+    const r = await createBooking(testDb(), env.DB, bookingInput(seed, startIso, 'g2'))
+    expect(r.ok).toBe(true)
+    const ok = await syncAppointment(env as { COMPOSIO_API_KEY?: string }, testDb(), TZ, r.appointment!.id, seed.tenantId, 'create')
+    expect(ok).toBe(false)
   })
 })

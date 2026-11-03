@@ -6,10 +6,12 @@ import { parseBody } from '../../middleware/validate'
 import { createDb } from '../../db/client'
 import {
   listAppointmentsInRange,
+  getByTenantAndId,
   updateAppointmentStatus,
 } from '../../db/repos/appointments'
 import { getTenantById } from '../../db/repos/tenants'
 import { createBooking } from '../../core/booking/service'
+import { syncAppointment } from '../../core/gcalendar/sync'
 import { toIso, zonedToUtc, zonedParts } from '../../lib/tz'
 
 /** Citas del panel: listar rango, crear manual, mover y cambiar estado. */
@@ -68,6 +70,10 @@ panelAppointmentRoutes.post('/', async (c) => {
     const status = result.code === 'conflict' ? 409 : 400
     throw badRequest(result.message ?? 'No se pudo crear la cita')
   }
+  // Evento en Google Calendar del profesional (best-effort, no bloquea la cita)
+  c.executionCtx.waitUntil(
+    syncAppointment(c.env, db, tenant.timezone, result.appointment!.id, tenantId, 'create'),
+  )
   return c.json({ appointmentId: result.appointment!.id }, 201)
 })
 
@@ -129,6 +135,16 @@ panelAppointmentRoutes.patch('/:id/move', async (c) => {
   if (!created.ok) {
     throw badRequest(created.message ?? 'El nuevo horario no está disponible')
   }
+  // Sync con Google: borrar el evento de la cita original y crear el del nuevo
+  // horario (la cita se recrea con id nuevo, así que son dos operaciones)
+  c.executionCtx.waitUntil(
+    Promise.all([
+      appt.googleEventId
+        ? syncAppointment(c.env, db, tenant.timezone, appt.id, tenantId, 'delete')
+        : Promise.resolve(false),
+      syncAppointment(c.env, db, tenant.timezone, created.appointment!.id, tenantId, 'create'),
+    ]),
+  )
   return c.json({ ok: true, moved: true, newId: created.appointment!.id })
 })
 
@@ -145,9 +161,17 @@ panelAppointmentRoutes.patch('/:id/status', async (c) => {
   const db = createDb(c.env.DB)
   const id = c.req.param('id')
 
-  const rows = await listAppointmentsInRange(db, tenantId, '2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')
-  if (!rows.some((r) => r.id === id)) throw notFound('Cita no encontrada')
+  const appt = await getByTenantAndId(db, tenantId, id)
+  if (!appt) throw notFound('Cita no encontrada')
+  const tenant = await getTenantById(db, tenantId)
+  if (!tenant) throw notFound('Negocio no encontrado')
 
   await updateAppointmentStatus(db, tenantId, id, body.status, body.reason)
+  if (body.status === 'cancelled' || body.status === 'no_show') {
+    // El evento externo deja de tener sentido; best-effort
+    c.executionCtx.waitUntil(
+      syncAppointment(c.env, db, tenant.timezone, id, tenantId, 'delete'),
+    )
+  }
   return c.json({ ok: true })
 })

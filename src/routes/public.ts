@@ -9,6 +9,7 @@ import { clientIp, rateLimit } from '../lib/rate-limit'
 import { getAvailability, getAvailableDays, getPublicContext } from '../core/availability/service'
 import { createBooking } from '../core/booking/service'
 import { cancelActiveByToken, getByManageToken } from '../db/repos/appointments'
+import { syncAppointment } from '../core/gcalendar/sync'
 import { verifyTurnstile } from '../lib/turnstile'
 import { nowIso } from '../lib/ids'
 import { createMailer } from '../lib/email/mailer'
@@ -224,6 +225,11 @@ publicRoutes.post('/:slug/bookings', async (c) => {
     )
   }
 
+  // Evento en el Google Calendar del profesional (best-effort)
+  c.executionCtx.waitUntil(
+    syncAppointment(c.env, db, tenant.timezone, result.appointment!.id, tenant.id, 'create'),
+  )
+
   return c.json(
     {
       appointment: {
@@ -267,6 +273,13 @@ publicRoutes.post('/booking/:token/cancel', async (c) => {
   }
 
   await cancelActiveByToken(db, token, body.reason ?? 'Cancelada por el cliente')
+  // Si el profesional conectó Google, el evento se elimina (best-effort)
+  const tenant = await getTenantById(db, detail.tenantId)
+  if (tenant) {
+    c.executionCtx.waitUntil(
+      syncAppointment(c.env, db, tenant.timezone, detail.id, detail.tenantId, 'delete'),
+    )
+  }
   return c.json({ ok: true })
 })
 
@@ -313,6 +326,16 @@ publicRoutes.post('/booking/:token/reschedule', async (c) => {
     const status = result.code === 'conflict' ? 409 : 400
     throw new AppError(status, result.code ?? 'error', result.message ?? 'No se pudo reprogramar')
   }
+
+  // Sync con Google: borrar el evento anterior y crear el del nuevo horario
+  c.executionCtx.waitUntil(
+    Promise.all([
+      current.googleEventId
+        ? syncAppointment(c.env, db, tenant.timezone, current.id, tenant.id, 'delete')
+        : Promise.resolve(false),
+      syncAppointment(c.env, db, tenant.timezone, result.appointment!.id, tenant.id, 'create'),
+    ]),
+  )
 
   return c.json(
     {

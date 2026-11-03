@@ -141,15 +141,16 @@ La lógica de negocio no toca el driver: vive en `core/` sobre tipos de dominio,
 ## Estado del proyecto y próximos pasos
 
 **Hecho**: MVP completo (7 fases) · integración **Google Calendar vía Composio** (conectar /
-desconectar la cuenta de cada profesional, con Connect Link alojada por Composio) · agenda del
-panel con drag & drop · 27 tests verdes.
+desconectar la cuenta de cada profesional, con Connect Link alojada por Composio) · **push de
+citas a Google Calendar** (crear/mover/cancelar sincroniza el evento del profesional) · agenda del
+panel con drag & drop · 30 tests verdes.
 
 **En curso / pendiente**:
 
 | # | Ítem | Estado |
 |---|---|---|
-| G3 | Push de citas → eventos en el Google Calendar del profesional (crear/mover/cancelar) | 🔄 a medias — plan técnico en [`AGENTS.md` §6](./AGENTS.md) |
-| G4 | Freebusy de Google bloquea slots en la reserva pública | ⏳ |
+| G3 | Push de citas → eventos en el Google Calendar del profesional (crear/mover/cancelar) | ✅ implementada |
+| G4 | Freebusy de Google bloquea slots en la reserva pública | ⏳ siguiente |
 | — | Emails reales (Resend) en producción | ⏳ (código listo, falta el secret) |
 | — | Página `/privacidad` | ⏳ |
 | — | Login de staff (integrante con usuario propio) | ⏳ |
@@ -168,7 +169,7 @@ panel con drag & drop · 27 tests verdes.
 |---|---|
 | Registro/login/logout/sesión | ✅ probado (curl + navegador) |
 | Servicios, equipo, horarios, bloqueos, feriados | ✅ probado (curl + navegador) |
-| Motor de disponibilidad | ✅ 27 tests (buffer, lead time, bloqueos, DST, solapes) |
+| Motor de disponibilidad | ✅ 30 tests (buffer, lead time, bloqueos, DST, solapes) |
 | Anti doble-reserva | ✅ 2 y 8 reservas concurrentes → exactamente 1 gana |
 | Página pública 4 pasos + gestión por token | ✅ probado end-to-end en navegador |
 | Calendario día/semana/mes + drag & drop | ✅ probado |

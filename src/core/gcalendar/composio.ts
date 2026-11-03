@@ -122,16 +122,24 @@ export async function deleteConnectedAccount(
   }
 }
 
-/** Ejecuta una herramienta con la account conectada (fase G3: eventos). */
+/** Ejecuta una herramienta con la account conectada (fase G3: eventos).
+ *  Ojo: Composio v3.1 exige `user_id` (entity) junto al connected account;
+ *  usamos el professionalId, mismo id con que se creó su auth link.
+ */
 export async function executeTool(
   env: { COMPOSIO_API_KEY?: string },
   toolSlug: string,
   connectedAccountId: string,
   args: Record<string, unknown>,
+  userId?: string,
 ): Promise<Record<string, unknown>> {
   const res = (await call(env, `/tools/execute/${toolSlug}`, {
     method: 'POST',
-    body: { connected_account_id: connectedAccountId, arguments: args },
+    body: {
+      connected_account_id: connectedAccountId,
+      ...(userId ? { user_id: userId } : {}),
+      arguments: args,
+    },
   })) as { successful?: boolean; error?: string | null }
   if (!res.successful) {
     throw new Error(`Tool ${toolSlug} falló: ${res.error ?? 'sin detalle'}`)

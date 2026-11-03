@@ -60,7 +60,7 @@ En **producción**: `npx wrangler secret put <NOMBRE>` (nunca en el código).
 ```bash
 npm run dev                 # wrangler dev + vite en paralelo
 npm run typecheck           # TypeScript del backend (tsc --noEmit)
-npm run test                # suite completa: 27 tests con D1 real local
+npm run test                # suite completa: 30 tests con D1 real local
 npm run build               # build de producción del frontend (web/dist)
 npm run deploy              # build + wrangler deploy
 npm run db:migrate:local    # migraciones → D1 local
@@ -150,9 +150,10 @@ tests/                            availability.spec.ts · booking.spec.ts (27 te
   emails de confirmación + recordatorios por cron, anti-spam Turnstile, rate limiting.
 - **Anti doble-reserva**: `INSERT … SELECT … WHERE NOT EXISTS (solape)` atómico en D1; probado con
   8 inserciones concurrentes → exactamente 1 gana.
-- **Google Calendar vía Composio — G1 + G2 (conexión)**:
+- **Google Calendar vía Composio — G1 + G2 (conexión) y G3 (push de eventos)**:
   - `src/core/gcalendar/composio.ts`: cliente REST v3.1 (`connected_accounts/link`, estado, DELETE,
-    `executeTool`).
+    `executeTool` con `user_id`).
+  - `src/core/gcalendar/sync.ts`: CREATE/DELETE de eventos (ver §6) enganchado a panel y público.
   - Tabla `calendar_connections` (migración `0004`): **una conexión por profesional**, multi-provider.
   - Connect Link alojada por Composio (con branding en su dashboard) — sin OAuth directo de Google.
   - Callback público `/api/google/callback` con mapeo consume-once en KV.
@@ -162,14 +163,14 @@ tests/                            availability.spec.ts · booking.spec.ts (27 te
   - El panel agenda **fuera del horario semanal** y en minutos fuera de grilla; solo bloquea el solape.
   - El calendario del panel **no pinta** citas canceladas/no-show (el espacio queda libre al mover).
   - El selector de profesional del diálogo filtra por los que ofrecen el servicio elegido.
-- **27 tests verdes** (`npm run test`), typecheck y build OK.
+- **30 tests verdes** (`npm run test`), typecheck y build OK.
 
 ### ⏳ Pendiente / a medias
 
 | # | Ítem | Estado |
 |---|---|---|
-| **G3** | **Push de citas → eventos de Google Calendar** | **A medias — ver §6. Es lo siguiente.** |
-| G4 | Freebusy de Google bloquea slots en la reserva pública | No iniciado (depende de G3) |
+| **G3** | Push de citas → eventos de Google Calendar | ✅ **Implementada** — ver §6 |
+| G4 | Freebusy de Google bloquea slots en la reserva pública | No iniciado — **es lo siguiente**; la infraestructura (conexión por profesional + `executeTool`) ya existe |
 | — | Emails reales (Resend): `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` | Código listo, falta configurar prod |
 | — | Página `/privacidad` | No iniciada |
 | — | Login de staff (integrante con su propio usuario) | No iniciado (feature mayor) |
@@ -182,112 +183,63 @@ Composio (Settings → regenerate) y actualizar `.dev.vars` local + el secret de
 
 ---
 
-## 6. G3 — Push de citas a Google Calendar (tarea a medias, plan listo)
+## 6. G3 — Push de citas a Google Calendar (implementada)
 
-**Objetivo**: que cada cita del negocio aparezca como evento en el Google Calendar **del
-profesional** que la atiende, y que se actualice/borre sola al mover o cancelar la cita.
+**Objetivo cumplido**: cada cita del negocio aparece como evento en el Google Calendar del
+profesional que la atiende; al mover o cancelar la cita, el evento se gira en Google.
 
-### Estado previo (ya existe, no rehacer)
+### Cómo funciona (bits implementados)
 
-- `src/core/gcalendar/composio.ts` → `executeTool(env, toolSlug, connectedAccountId, args)` ya
-  implemented y tipado. Envía `POST /api/v3.1/tools/execute/{slug}` con `{ connected_account_id, arguments }`.
-- `appointments.google_event_id` → **columna ya existe** (`src/db/schema.ts`), creada en la
-  migración `0003_google_calendar.sql`. Sirve para referenciar el evento de Google.
-- `src/db/repos/calendarConnections.ts` → `getConnectionForProfessional(db, tenantId, professionalId)`.
-- Conexión real funcionando end-to-end (el usuario ya conectó su cuenta; badge verde en Equipo).
+- `src/core/gcalendar/sync.ts` — módulo de sync best-effort:
+  - `pushEvent(env, conn, userId, timezone, data)` → `GOOGLECALENDAR_CREATE_EVENT`; devuelve el
+    `event_id` y **lo guarda en `appointments.google_event_id`**.
+  - `deleteEvent(env, conn, userId, eventId)` → `GOOGLECALENDAR_DELETE_EVENT` (tolerante a 404/410).
+  - `toLocalStamp(isoUtc, timezone)` → convierte UTC a pared local `YYYY-MM-DDTHH:MM:SS`
+    (formato que exigen los tools).
+  - `syncAppointment(env, db, timezone, appointmentId, tenantId, op)` — entrada única desde las
+    rutas; carga la cita + conexión del profesional y ejecuta CREATE o DELETE. **Nunca lanza**:
+    un error de Google se loguea y no afecta la cita. Sin conexión → no-op silencioso.
+- `src/core/gcalendar/composio.ts` — `executeTool` acepta `userId`: **Composio v3.1 exige
+  `user_id` junto al `connected_account_id`** (error 1811 si falta). Usamos el
+  `professionalId`, mismo id con que se creó su auth link.
+- `src/db/repos/appointments.ts` — `AppointmentDetailWithGoogle` (agrega `googleEventId`),
+  `detailWithGoogle` select compartido y `getByTenantAndId`.
 
-### Paso 1 — Descubrir los slugs y argumentos reales de los tools
+### Hooks (dónde se llama, con `ctx.waitUntil`)
 
-No adivines los nombres. Consulta la API de Composio con tu key:
+| Archivo | Operación | Acción en Google |
+|---|---|---|
+| `src/routes/panel/appointments.ts` — `POST /` | cita manual | CREATE |
+| `src/routes/panel/appointments.ts` — `PATCH /:id/move` | mover (recrea la cita) | DELETE (vieja) + CREATE (nueva) |
+| `src/routes/panel/appointments.ts` — `PATCH /:id/status` | cancel / no_show | DELETE |
+| `src/routes/public.ts` — `POST /:slug/bookings` | reserva pública | CREATE |
+| `src/routes/public.ts` — `POST /booking/:token/cancel` | cancela el cliente | DELETE |
+| `src/routes/public.ts` — `POST /booking/:token/reschedule` | reprograma el cliente | DELETE + CREATE |
 
-```bash
-curl -s "https://backend.composio.dev/api/v3.1/tools?toolkit=googlecalendar" \
-  -H "x-api-key: $COMPOSIO_API_KEY"
-```
+### Detalles que quizás necesites tocar después
 
-Filtra los que contengan `EVENT` (típicamente `GOOGLECALENDAR_CREATE_EVENT`,
-`GOOGLECALENDAR_UPDATE_EVENT` / `..._MODIFY_EVENT`, `GOOGLECALENDAR_DELETE_EVENT`) y **anota los
-argumentos exactos** (`event_title` / `start_datetime` / `end_datetime` / `calendar_id` / etc.).
-Alternativa: `GET /api/v3.1/tools?toolkits=googlecalendar` o la página del toolkit en
-`composio.dev/toolkits/googlecalendar`.
+- Formato de horas de los tools: `YYYY-MM-DDTHH:MM:SS` + `timezone` IANA del tenant.
+- En el CREATE/DELETE se manda `create_meeting_room: false` (evita links de Meet) y
+  `send_updates: 'none'` (evita emails de Google aparte de los de cital).
+- La respuesta del tool incluye el evento completo en `data.response_data` (Google API cruda):
+  el id está en `raw.id` (aliases `event_id`/`eventId` por si cambia la versión).
+- Autor del evento: la cuenta Google del profesional (`calendar_id: 'primary'`).
+- Título del evento: `"<Servicio> — <Cliente>"`; description = notas de la cita.
 
-### Paso 2 — Nuevo módulo `src/core/gcalendar/sync.ts`
+### Verificación
 
-Tres funciones best-effort, con la misma forma que el resto del core:
+- Tests (`tests/booking.spec.ts`): `toLocalStamp` correcto; sin `COMPOSIO_API_KEY` la sync
+  no hace nada y no escribe `google_event_id`; sin conexión es no-op. 30 tests verdes.
+- Manual (verificado con la cuenta real del negocio): crear evento → aparece en el Calendar
+  del profesional a la hora local correcta; borrar → desaparece.
+- **Pendiente** de validar con el usuario: mover cita por drag & drop (DELETE + CREATE encadenados).
 
-```ts
-pushEvent(env, conn, { title, startAt, endAt, color?, notes? }): Promise<{ eventId: string }>
-updateEvent(env, conn, eventId, { startAt, endAt, title? }): Promise<void>
-deleteEvent(env, conn, eventId): Promise<void>
-```
+### Variables
 
-Reglas:
-- **Nunca lanzan hacia el flujo de la cita**: capturan el error, lo loguean
-  (`console.error('[cital:gcal] …')`) y devuelven `null`/void.
-- Si el profesional **no tiene conexión** → no se hace nada (skip silencioso).
-- Fechas: enviar ISO con offset de `America/Santiago` (el `tenant.timezone`), no UTC pelado,
-  para que el evento caiga en la hora local correcta.
-- Título sugerido: `"<Servicio> — <Cliente>"`; duración = `endAt - startAt` (ya viene en la cita).
-
-### Paso 3 — Enganchar los flujos (con `ctx.waitUntil`)
-
-La cita **nunca** debe esperar a Google. En cada ruta, tras confirmar la operación en D1:
-
-```ts
-c.executionCtx.waitUntil(
-  syncAppointmentToGoogle(c.env, { db, tenantId, appointmentId, op: 'create' | 'update' | 'delete' })
-    .catch((err) => console.error('[cital:gcal] sync falló:', err)),
-)
-```
-
-Puntos exactos a tocar:
-
-| Archivo | Línea aprox. | Operación | Tool |
-|---|---|---|---|
-| `src/routes/panel/appointments.ts` | 57 (`POST /`) | crear evento | CREATE |
-| `src/routes/panel/appointments.ts` | 117 (`PATCH /:id/move`) | **borrar** el evento viejo + **crear** el nuevo (la cita original se cancela y nace otra con id nuevo) | DELETE + CREATE |
-| `src/routes/panel/appointments.ts` | 151 (`PATCH /:id/status`) | si el nuevo estado es `cancelled` → borrar evento | DELETE |
-| `src/routes/public.ts` | 199 (`POST /:slug/bookings`) | crear evento | CREATE |
-| `src/routes/public.ts` | 298 (`POST /booking/:token/reschedule`) | borrar + crear | DELETE + CREATE |
-| `src/routes/public.ts` | 254 (`POST /booking/:token/cancel`) | borrar evento | DELETE |
-
-Tip: el `move` y el `reschedule` **recrean** la cita (nace un id nuevo), así que el
-`google_event_id` de la cita nueva está vacío y el de la vieja sigue apunta al evento viejo:
-borra el viejo y crea el nuevo (o actualiza el viejo y guarda su id en la cita nueva).
-
-Tras crear el evento, **guarda el id** devuelto por Composio:
-
-```sql
-UPDATE appointments SET google_event_id = ? WHERE id = ?
-```
-
-(`AppointmentDetail` en `src/db/repos/appointments.ts` hoy no selecciona esa columna: agrégala si
-necesitas leerla en las rutas.)
-
-### Paso 4 — Tests
-
-- Añadir tests en `tests/booking.spec.ts` (o un `tests/gcalendar.spec.ts`) **mockeando**
-  `executeTool` (vi.mock) para verificar que:
-  - con conexión → se llama CREATE y se guarda `google_event_id`;
-  - sin conexión → no se llama a Composio y la cita **igual** se crea;
-  - un error de Composio **no** revierte la cita.
-- Mantener `npm run test` en verde (hoy: 27).
-
-### Paso 5 — Verificación manual
-
-1. Panel → Equipo → profesional con Google conectado.
-2. Crear una cita manual → aparece en Google Calendar del profesional con la hora local correcta.
-3. Moverla (drag & drop) → el evento de Google se actualiza (no queda duplicado).
-4. Cancelarla → el evento desaparece de Google.
-5. Probar con un profesional **sin** conexión → la cita se crea igual, sin errores en consola.
-
-### Variables y configuración
-
-- `COMPOSIO_API_KEY` (secret de producción) — sin esto, `ensureGoogleAuthConfigId` lanza y la
-  conexión falla con el mensaje "habilita el toolkit Google Calendar en tu dashboard".
-- `PUBLIC_APP_URL` — origen canónico del callback (`appOrigin()` en `composio.ts`).
-- En el dashboard de Composio: **Redirect URLs** debe incluir el callback de producción
-  (`https://<tu-dominio>/api/google/callback`). En dev siempre `http://localhost:5174`.
+- `COMPOSIO_API_KEY` (secret) — obligatoria para la sync.
+- `PUBLIC_APP_URL` — callback/recursos canónicos.
+- Dashboard de Composio: Redirect URLs incluye el callback de producción
+  (`https://<tu-dominio>/api/google/callback`); en dev `http://localhost:5174`.
 
 ---
 
@@ -324,7 +276,7 @@ necesitas leerla en las rutas.)
 
 ```bash
 npm run typecheck   # 0 errores
-npm run test        # 27+ tests verdes
+npm run test        # 30+ tests verdes
 npm run build       # build de web/dist OK
 ```
 

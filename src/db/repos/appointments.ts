@@ -30,33 +30,41 @@ export interface AppointmentDetail {
   customerEmail: string | null
 }
 
+export interface AppointmentDetailWithGoogle extends AppointmentDetail {
+  googleEventId: string | null
+}
+
+/** Columnas con google_event_id + joins, para sincronizar o leer el evento externo. */
+const detailWithGoogle = {
+  id: appointments.id,
+  tenantId: appointments.tenantId,
+  tenantSlug: tenants.slug,
+  serviceId: appointments.serviceId,
+  professionalId: appointments.professionalId,
+  customerId: appointments.customerId,
+  startAt: appointments.startAt,
+  endAt: appointments.endAt,
+  status: appointments.status,
+  priceClp: appointments.priceClp,
+  notes: appointments.notes,
+  source: appointments.source,
+  manageToken: appointments.manageToken,
+  cancelReason: appointments.cancelReason,
+  cancelledAt: appointments.cancelledAt,
+  createdAt: appointments.createdAt,
+  googleEventId: appointments.googleEventId,
+  serviceName: services.name,
+  serviceDurationMinutes: services.durationMinutes,
+  professionalName: professionals.name,
+  customerName: customers.name,
+  customerPhone: customers.phone,
+  customerEmail: customers.email,
+}
+
 /** Detalle de una reserva por su token de gestión (cancelar/reprogramar sin login). */
-export async function getByManageToken(db: Db, token: string): Promise<AppointmentDetail | null> {
+export async function getByManageToken(db: Db, token: string): Promise<AppointmentDetailWithGoogle | null> {
   const rows = await db
-    .select({
-      id: appointments.id,
-      tenantId: appointments.tenantId,
-      tenantSlug: tenants.slug,
-      serviceId: appointments.serviceId,
-      professionalId: appointments.professionalId,
-      customerId: appointments.customerId,
-      startAt: appointments.startAt,
-      endAt: appointments.endAt,
-      status: appointments.status,
-      priceClp: appointments.priceClp,
-      notes: appointments.notes,
-      source: appointments.source,
-      manageToken: appointments.manageToken,
-      cancelReason: appointments.cancelReason,
-      cancelledAt: appointments.cancelledAt,
-      createdAt: appointments.createdAt,
-      serviceName: services.name,
-      serviceDurationMinutes: services.durationMinutes,
-      professionalName: professionals.name,
-      customerName: customers.name,
-      customerPhone: customers.phone,
-      customerEmail: customers.email,
-    })
+    .select(detailWithGoogle)
     .from(appointments)
     .innerJoin(tenants, eq(tenants.id, appointments.tenantId))
     .innerJoin(services, eq(services.id, appointments.serviceId))
@@ -65,7 +73,25 @@ export async function getByManageToken(db: Db, token: string): Promise<Appointme
     .where(eq(appointments.manageToken, token))
     .orderBy(desc(appointments.createdAt))
     .limit(1)
-  return (rows[0] as AppointmentDetail) ?? null
+  return (rows[0] as AppointmentDetailWithGoogle) ?? null
+}
+
+/** Detalle filtrado por tenant e id (con google_event_id y joins). */
+export async function getByTenantAndId(
+  db: Db,
+  tenantId: string,
+  id: string,
+): Promise<AppointmentDetailWithGoogle | null> {
+  const rows = await db
+    .select(detailWithGoogle)
+    .from(appointments)
+    .innerJoin(tenants, eq(tenants.id, appointments.tenantId))
+    .innerJoin(services, eq(services.id, appointments.serviceId))
+    .innerJoin(professionals, eq(professionals.id, appointments.professionalId))
+    .innerJoin(customers, eq(customers.id, appointments.customerId))
+    .where(and(eq(appointments.tenantId, tenantId), eq(appointments.id, id)))
+    .limit(1)
+  return (rows[0] as AppointmentDetailWithGoogle) ?? null
 }
 
 export interface AppointmentRow extends Omit<AppointmentDetail, 'serviceName' | 'serviceDurationMinutes' | 'professionalName' | 'customerName' | 'customerPhone' | 'customerEmail'> {}
@@ -106,38 +132,17 @@ export async function cancelActiveByToken(
   return true
 }
 
-/** Citas activas de un tenant en rango UTC (para calendario y motor). */
+/** Citas de un tenant en rango UTC (para calendario y motor). Incluye canceladas. */
 export async function listAppointmentsInRange(
   db: Db,
   tenantId: string,
   fromIso: string,
   toIso: string,
-): Promise<AppointmentDetail[]> {
+): Promise<AppointmentDetailWithGoogle[]> {
   return (await db
-    .select({
-      id: appointments.id,
-      tenantId: appointments.tenantId,
-      serviceId: appointments.serviceId,
-      professionalId: appointments.professionalId,
-      customerId: appointments.customerId,
-      startAt: appointments.startAt,
-      endAt: appointments.endAt,
-      status: appointments.status,
-      priceClp: appointments.priceClp,
-      notes: appointments.notes,
-      source: appointments.source,
-      manageToken: appointments.manageToken,
-      cancelReason: appointments.cancelReason,
-      cancelledAt: appointments.cancelledAt,
-      createdAt: appointments.createdAt,
-      serviceName: services.name,
-      serviceDurationMinutes: services.durationMinutes,
-      professionalName: professionals.name,
-      customerName: customers.name,
-      customerPhone: customers.phone,
-      customerEmail: customers.email,
-    })
+    .select(detailWithGoogle)
     .from(appointments)
+    .innerJoin(tenants, eq(tenants.id, appointments.tenantId))
     .innerJoin(services, eq(services.id, appointments.serviceId))
     .innerJoin(professionals, eq(professionals.id, appointments.professionalId))
     .innerJoin(customers, eq(customers.id, appointments.customerId))
@@ -148,5 +153,5 @@ export async function listAppointmentsInRange(
         gte(appointments.endAt, fromIso),
       ),
     )
-    .orderBy(appointments.startAt)) as AppointmentDetail[]
+    .orderBy(appointments.startAt)) as AppointmentDetailWithGoogle[]
 }
