@@ -17,10 +17,21 @@ import {
   getConnectionForProfessional,
   listConnections,
 } from '../../db/repos/calendarConnections'
+import { getTenantById } from '../../db/repos/tenants'
 import { newId, nowIso } from '../../lib/ids'
 import type { ProfessionalRow } from '../../db/repos/professionals'
 
 export const professionalRoutes = new Hono<HonoEnv>()
+
+/** La página pública cachea su contexto en KV (TTL 60s): invalida al cambiar el equipo. */
+async function invalidatePublic(
+  c: { env: { CACHE: KVNamespace } },
+  db: ReturnType<typeof createDb>,
+  tenantId: string,
+): Promise<void> {
+  const tenant = await getTenantById(db, tenantId)
+  if (tenant) await c.env.CACHE.delete(`pub:${tenant.slug}`)
+}
 
 /** Proyecta un profesional para el frontend: estado de calendario sí, ids internos no. */
 function toClient(p: ProfessionalRow, conn: { accountEmail: string | null } | null) {
@@ -110,6 +121,7 @@ professionalRoutes.post('/', async (c) => {
   )
   const created = (await getProfessional(db, tenantId, id)) as ProfessionalRow | null
   const conn = created ? await getConnectionForProfessional(db, tenantId, id) : null
+  await invalidatePublic(c, db, tenantId)
   return c.json({ professional: created ? { ...toClient(created, conn), serviceIds } : null }, 201)
 })
 
@@ -134,6 +146,7 @@ professionalRoutes.patch('/:id', async (c) => {
   }
   const updated = (await getProfessional(db, tenantId, id)) as ProfessionalRow | null
   const conn = updated ? await getConnectionForProfessional(db, tenantId, id) : null
+  await invalidatePublic(c, db, tenantId)
   return c.json({
     professional: updated ? { ...toClient(updated, conn), serviceIds: body.serviceIds ?? [] } : null,
   })
@@ -158,5 +171,6 @@ professionalRoutes.delete('/:id', async (c) => {
   }
 
   await deleteProfessional(db, tenantId, id)
+  await invalidatePublic(c, db, tenantId)
   return c.json({ ok: true })
 })

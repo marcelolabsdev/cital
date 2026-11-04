@@ -78,5 +78,7 @@ panelRoutes.patch('/onboarding', async (c) => {
 
   await updateTenant(db, tenantId, body)
   const tenant = await getTenantById(db, tenantId)
+  // La página pública cachea el contexto en KV (TTL 60s): invalidamos para que los cambios de marca se vean al instante
+  if (tenant) await c.env.CACHE.delete(`pub:${tenant.slug}`)
   return c.json({ tenant })
 })
