@@ -34,6 +34,13 @@ export function CustomersPage() {
   const [q, setQ] = useState('')
   const { data: customers, isLoading } = useCustomers(q)
   const [selected, setSelected] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+
+  // Paginación: 8 clientes por página con «Anterior / Siguiente» al final.
+  const PER_PAGE = 8
+  const totalPages = Math.max(1, Math.ceil((customers?.length ?? 0) / PER_PAGE))
+  const currentPage = Math.min(page, totalPages)
+  const visible = customers?.slice((currentPage - 1) * PER_PAGE, currentPage * PER_PAGE) ?? []
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -58,7 +65,10 @@ export function CustomersPage() {
           className="pl-9"
           placeholder="Buscar por nombre, teléfono o email…"
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => {
+            setQ(e.target.value)
+            setPage(1)
+          }}
           aria-label="Buscar clientes"
         />
       </div>
@@ -84,29 +94,57 @@ export function CustomersPage() {
           </p>
         </div>
       ) : (
-        <ul className="mt-6 space-y-2">
-          {customers.map((c, i) => (
-            <li
-              key={c.id}
-            >
-              <button
-                onClick={() => setSelected(c.id)}
-                className="flex w-full items-center gap-3.5 rounded-xl border border-border/70 bg-card p-4 text-left shadow-sm transition-colors hover:border-border hover:bg-accent/30"
+        <>
+          <ul className="mt-6 space-y-2">
+            {visible.map((c) => (
+              <li
+                key={c.id}
               >
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[13px] font-semibold text-primary">
-                  {initialsOf(c.name)}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">{c.name}</span>
-                  <span className="block truncate text-[13px] text-muted-foreground">
-                    {c.phone ?? c.email ?? '—'}
+                <button
+                  onClick={() => setSelected(c.id)}
+                  className="flex w-full items-center gap-3.5 rounded-xl border border-border/70 bg-card p-4 text-left shadow-sm transition-colors hover:border-border hover:bg-accent/30"
+                >
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[13px] font-semibold text-primary">
+                    {initialsOf(c.name)}
                   </span>
-                </span>
-                <Badge variant="secondary">{c.appointmentsCount} citas</Badge>
-              </button>
-            </li>
-          ))}
-        </ul>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{c.name}</span>
+                    <span className="block truncate text-[13px] text-muted-foreground">
+                      {c.phone ?? c.email ?? '—'}
+                    </span>
+                  </span>
+                  <Badge variant="secondary">{c.appointmentsCount} citas</Badge>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {totalPages > 1 && (
+            <nav
+              className="mt-5 flex items-center justify-center gap-3"
+              aria-label="Paginación de clientes"
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage <= 1}
+                onClick={() => setPage(currentPage - 1)}
+              >
+                Anterior
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Página {currentPage} de {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= totalPages}
+                onClick={() => setPage(currentPage + 1)}
+              >
+                Siguiente
+              </Button>
+            </nav>
+          )}
+        </>
       )}
 
       <CustomerDialog customerId={selected} onClose={() => setSelected(null)} />
