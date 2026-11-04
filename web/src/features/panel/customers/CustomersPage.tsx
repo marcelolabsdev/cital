@@ -95,32 +95,34 @@ export function CustomersPage() {
         </div>
       ) : (
         <>
-          <ul className="mt-6 space-y-2">
+          <ul className="mt-6 space-y-1.5">
             {visible.map((c) => (
               <li
                 key={c.id}
               >
                 <button
                   onClick={() => setSelected(c.id)}
-                  className="flex w-full items-center gap-3.5 rounded-xl border border-border/70 bg-card p-4 text-left shadow-sm transition-colors hover:border-border hover:bg-accent/30"
+                  className="flex w-full items-center gap-3 rounded-lg border border-border/70 bg-card px-3 py-2 text-left shadow-sm transition-colors hover:border-border hover:bg-accent/30"
                 >
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[13px] font-semibold text-primary">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
                     {initialsOf(c.name)}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{c.name}</span>
-                    <span className="block truncate text-[13px] text-muted-foreground">
-                      {c.phone ?? c.email ?? '—'}
-                    </span>
+                    <span className="block truncate text-[13.5px] font-medium leading-tight">{c.name}</span>
+                    {(c.phone || c.email) && (
+                      <span className="block truncate text-[12px] leading-tight text-muted-foreground">
+                        {[c.phone, c.email].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
                   </span>
-                  <Badge variant="secondary">{c.appointmentsCount} citas</Badge>
+                  <Badge variant="secondary" className="shrink-0 text-[11px]">{c.appointmentsCount} citas</Badge>
                 </button>
               </li>
             ))}
           </ul>
           {totalPages > 1 && (
             <nav
-              className="mt-5 flex items-center justify-center gap-3"
+              className="mt-4 flex items-center justify-center gap-3"
               aria-label="Paginación de clientes"
             >
               <Button
