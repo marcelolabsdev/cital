@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 import {
@@ -83,16 +84,16 @@ export default function BookingPage() {
   const professional =
     professionalId ? info.professionals.find((p) => p.id === professionalId) ?? null : null
 
-  const canContinue =
-    (step === 1 && !!serviceId) ||
-    (step === 2 && !!service) ||
-    (step === 3 && !!slot) ||
-    step === 4
+  /** Cambia de paso y deja la página arriba (el botón quedó dentro del flujo). */
+  function goTo(next: number) {
+    setStep(next)
+    window.scrollTo(0, 0)
+  }
 
   return (
     <div
       className="relative min-h-svh"
-      style={{ '--brand': brand, '--slot-accent': brand } as React.CSSProperties}
+      style={{ '--brand': brand, '--slot-accent': brand } as CSSProperties}
     >
       {/* Banda de marca */}
       <div
@@ -100,7 +101,7 @@ export default function BookingPage() {
         className="absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-[var(--brand)]/[0.14] via-[var(--brand)]/[0.05] to-transparent"
       />
 
-      <div className="relative mx-auto max-w-lg px-5 pb-32 pt-8">
+      <div className="relative mx-auto max-w-lg px-5 pb-10 pt-8">
         <BusinessHeader info={info} />
         <ProgressBar step={step} />
 
@@ -124,6 +125,8 @@ export default function BookingPage() {
                   setDate(null)
                   setSlot(null)
                 }}
+                canContinue={!!serviceId}
+                onContinue={() => goTo(2)}
               />
             )}
             {step === 2 && service && (
@@ -132,7 +135,9 @@ export default function BookingPage() {
                 serviceId={service.id}
                 selected={professionalId}
                 onSelect={setProfessionalId}
-                onBack={() => setStep(1)}
+                onBack={() => goTo(1)}
+                canContinue={!!service}
+                onContinue={() => goTo(3)}
               />
             )}
             {step === 3 && service && (
@@ -147,7 +152,9 @@ export default function BookingPage() {
                   setSlot(null)
                 }}
                 onPickSlot={setSlot}
-                onBack={() => setStep(2)}
+                onBack={() => goTo(2)}
+                canContinue={!!slot}
+                onContinue={() => goTo(4)}
               />
             )}
             {step === 4 && service && slot && (
@@ -157,46 +164,13 @@ export default function BookingPage() {
                 service={service}
                 slot={slot}
                 professionalName={professional?.name ?? null}
-                onBack={() => setStep(3)}
+                onBack={() => goTo(3)}
                 onDone={(appt) => setDone({ appointment: appt, slot })}
               />
             )}
           </div>
         )}
       </div>
-
-      {/* Barra de acción fija (pasos 1-3): siempre a mano, estilo app */}
-      {!done && step < 4 && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-background/85 backdrop-blur-md">
-          <div
-            className="mx-auto max-w-lg px-5 py-3"
-            style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
-          >
-            <div className="flex items-center gap-2.5">
-              {step > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setStep(step - 1)}
-                  aria-label="Volver al paso anterior"
-                  className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-border bg-card shadow-sm transition-colors hover:bg-accent active:scale-[0.98]"
-                >
-                  <ArrowLeft className="size-4" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setStep(step + 1)}
-                disabled={!canContinue}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-[15px] font-semibold text-white shadow-md transition-transform active:scale-[0.98] disabled:opacity-40"
-                style={{ backgroundColor: 'var(--brand)' }}
-              >
-                {step === 2 ? 'Ver horarios' : 'Continuar'}
-                <ArrowRight className="size-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -266,10 +240,14 @@ function ServiceStep({
   info,
   selected,
   onSelect,
+  canContinue,
+  onContinue,
 }: {
   info: NonNullable<ReturnType<typeof usePublicInfo>['data']>
   selected: string | null
   onSelect: (id: string) => void
+  canContinue: boolean
+  onContinue: () => void
 }) {
   // Solo servicios con al menos un profesional que los atienda
   const services = info.services.filter((s) =>
@@ -288,7 +266,8 @@ function ServiceStep({
           text="Este negocio aún no configura servicios para reservar online."
         />
       ) : (
-        <div className="grid gap-2.5">
+        <>
+          <div className="grid gap-2.5">
           {services.map((s) => {
             const active = selected === s.id
             return (
@@ -348,7 +327,9 @@ function ServiceStep({
               </button>
             )
           })}
-        </div>
+          </div>
+          <StepActions canContinue={canContinue} onContinue={onContinue} label="Continuar" />
+        </>
       )}
     </section>
   )
@@ -362,12 +343,16 @@ function ProfessionalStep({
   selected,
   onSelect,
   onBack,
+  canContinue,
+  onContinue,
 }: {
   info: NonNullable<ReturnType<typeof usePublicInfo>['data']>
   serviceId: string
   selected: string | null
   onSelect: (id: string | null) => void
   onBack: () => void
+  canContinue: boolean
+  onContinue: () => void
 }) {
   const pros = info.professionals.filter((p) => p.serviceIds.includes(serviceId))
   return (
@@ -401,6 +386,7 @@ function ProfessionalStep({
           />
         ))}
       </div>
+      <StepActions canContinue={canContinue} onContinue={onContinue} label="Ver horarios" />
     </section>
   )
 }
@@ -474,6 +460,8 @@ function DateTimeStep({
   onPickDate,
   onPickSlot,
   onBack,
+  canContinue,
+  onContinue,
 }: {
   slug: string
   serviceId: string
@@ -483,6 +471,8 @@ function DateTimeStep({
   onPickDate: (d: string) => void
   onPickSlot: (s: PublicSlot) => void
   onBack: () => void
+  canContinue: boolean
+  onContinue: () => void
 }) {
   const today = new Date()
   const [monthCursor, setMonthCursor] = useState(() => {
@@ -612,6 +602,7 @@ function DateTimeStep({
           />
         </div>
       )}
+      <StepActions canContinue={canContinue} onContinue={onContinue} label="Continuar" />
     </section>
   )
 }
@@ -785,6 +776,36 @@ function BackBar({ onBack, title }: { onBack: () => void; title: string }) {
       <ArrowLeft className="size-4" />
       {title}
     </button>
+  )
+}
+
+/**
+ * Botón de acción del paso, en el flujo: aparece inmediatamente después del
+ * último campo/lista del paso (mismo patrón que el paso 4). Deshabilitado
+ * hasta que el paso esté completo.
+ */
+function StepActions({
+  canContinue,
+  onContinue,
+  label,
+}: {
+  canContinue: boolean
+  onContinue: () => void
+  label: string
+}) {
+  return (
+    <div className="mt-6">
+      <button
+        type="button"
+        onClick={onContinue}
+        disabled={!canContinue}
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-[15px] font-semibold text-white shadow-md transition-transform active:scale-[0.98] disabled:opacity-40"
+        style={{ backgroundColor: 'var(--brand)' }}
+      >
+        {label}
+        <ArrowRight className="size-4" />
+      </button>
+    </div>
   )
 }
 
