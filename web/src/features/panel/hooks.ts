@@ -59,6 +59,7 @@ export interface Professional {
   phone: string | null
   bio: string | null
   color: string | null
+  photo: string | null
   isActive: boolean
   serviceIds: string[]
   googleConnected?: boolean
@@ -71,6 +72,7 @@ export interface ProfessionalInput {
   phone?: string | null
   bio?: string | null
   color?: string | null
+  photo?: string | null
   isActive?: boolean
   serviceIds?: string[]
 }

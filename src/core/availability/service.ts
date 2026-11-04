@@ -27,6 +27,7 @@ export interface ProfessionalPublic {
   name: string
   color: string | null
   bio: string | null
+  photo: string | null
 }
 
 export interface AvailabilityContext {
@@ -80,7 +81,7 @@ export async function getPublicContext(
         .filter((l) => l.serviceId === s.id && proRows.some((p) => p.id === l.professionalId))
         .map((l) => l.professionalId),
     })),
-    professionals: proRows.map((p) => ({ id: p.id, name: p.name, color: p.color, bio: p.bio })),
+    professionals: proRows.map((p) => ({ id: p.id, name: p.name, color: p.color, bio: p.bio, photo: p.photo })),
   }
 }
 

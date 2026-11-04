@@ -383,6 +383,7 @@ function ProfessionalStep({
             onClick={() => onSelect(p.id)}
             initial={p.name.charAt(0).toUpperCase()}
             color={p.color ?? DEFAULT_ENTITY_COLOR}
+            photo={p.photo ?? undefined}
           />
         ))}
       </div>
@@ -399,6 +400,7 @@ function AvatarChip({
   icon,
   initial,
   color = DEFAULT_ENTITY_COLOR,
+  photo,
 }: {
   label: string
   sub?: string
@@ -407,6 +409,7 @@ function AvatarChip({
   icon?: React.ReactNode
   initial?: string
   color?: string
+  photo?: string
 }) {
   return (
     <button
@@ -423,13 +426,13 @@ function AvatarChip({
       <span className="relative">
         <span
           className={cn(
-            'flex size-14 items-center justify-center rounded-full text-lg font-semibold transition-shadow',
+            'flex size-14 items-center justify-center overflow-hidden rounded-full text-lg font-semibold transition-shadow',
             selected && 'ring-2 ring-[var(--brand)] ring-offset-2 ring-offset-card',
           )}
           style={icon ? { backgroundColor: 'oklch(0.955 0.007 110)', color: 'inherit' } : { backgroundColor: `${color}22`, color }}
           aria-hidden="true"
         >
-          {icon ?? initial}
+          {photo ? <img src={photo} alt="" className="size-full object-cover" /> : (icon ?? initial)}
         </span>
         {selected && (
           <span

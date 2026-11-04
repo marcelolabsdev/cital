@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Check, Loader2 } from 'lucide-react'
+import { Check, Loader2, Trash2, UserRound } from 'lucide-react'
 import { ApiError } from '@/lib/api'
+import { compressImage } from '@/lib/compressImage'
 import { cn } from '@/lib/utils'
 import { ENTITY_COLORS as COLORS, DEFAULT_ENTITY_COLOR } from '@/lib/brand'
 import {
@@ -53,6 +54,8 @@ export function ProfessionalDialog({
   const save = useSaveProfessional()
   const [serviceIds, setServiceIds] = useState<string[]>([])
   const [color, setColor] = useState(COLORS[0]!)
+  const [photo, setPhoto] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const {
     register,
@@ -71,8 +74,18 @@ export function ProfessionalDialog({
       })
       setServiceIds(professional?.serviceIds ?? [])
       setColor(professional?.color ?? COLORS[0]!)
+      setPhoto(professional?.photo ?? null)
     }
   }, [open, professional, reset])
+
+  async function onPickPhoto(file: File | undefined) {
+    if (!file) return
+    try {
+      setPhoto(await compressImage(file, 256))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo cargar la imagen')
+    }
+  }
 
   const busyServices = services ?? []
 
@@ -96,6 +109,7 @@ export function ProfessionalDialog({
                   email: d.email || null,
                   bio: d.bio || null,
                   color,
+                  photo,
                   serviceIds,
                 },
               })
@@ -108,6 +122,46 @@ export function ProfessionalDialog({
           className="grid gap-4"
           noValidate
         >
+          <div className="grid gap-2">
+            <Label>Foto del integrante</Label>
+            <div className="flex items-center gap-4">
+              <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted">
+                {photo ? (
+                  <img src={photo} alt="Foto del integrante" className="size-full object-cover" />
+                ) : (
+                  <UserRound className="size-7 text-muted-foreground" />
+                )}
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+                  Subir foto
+                </Button>
+                {photo && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => {
+                      setPhoto(null)
+                      if (fileRef.current) fileRef.current.value = ''
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                    Quitar
+                  </Button>
+                )}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => void onPickPhoto(e.target.files?.[0])}
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="grid gap-2">
             <Label htmlFor="pro-name">Nombre</Label>
             <Input

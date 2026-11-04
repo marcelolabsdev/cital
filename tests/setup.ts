@@ -7,6 +7,7 @@ import migration0001 from '../src/db/migrations/0001_init.sql?raw'
 import migration0002 from '../src/db/migrations/0002_cancellation_policy.sql?raw'
 import migration0003 from '../src/db/migrations/0003_google_calendar.sql?raw'
 import migration0004 from '../src/db/migrations/0004_calendar_connections.sql?raw'
+import migration0005 from '../src/db/migrations/0005_professional_photo.sql?raw'
 
 /** Bindings tipados según wrangler.jsonc (ProvidedEnv no los conoce). */
 export const env = providedEnv as unknown as {
@@ -34,6 +35,7 @@ const migrations = [
   { name: '0002_cancellation_policy.sql', queries: toQueries(migration0002) },
   { name: '0003_google_calendar.sql', queries: toQueries(migration0003) },
   { name: '0004_calendar_connections.sql', queries: toQueries(migration0004) },
+  { name: '0005_professional_photo.sql', queries: toQueries(migration0005) },
 ]
 
 beforeAll(async () => {

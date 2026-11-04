@@ -24,6 +24,7 @@ export interface PublicInfo {
     name: string
     color: string | null
     bio: string | null
+    photo: string | null
     serviceIds: string[]
   }[]
   turnstileSiteKey: string | null

@@ -31,6 +31,7 @@ function toClient(p: ProfessionalRow, conn: { accountEmail: string | null } | nu
     phone: p.phone,
     bio: p.bio,
     color: p.color,
+    photo: p.photo,
     isActive: p.isActive,
     googleConnected: !!conn,
     googleEmail: conn?.accountEmail ?? null,
@@ -49,6 +50,12 @@ const professionalBody = z
       .regex(/^#[0-9a-fA-F]{6}$/, 'El color debe ser hexadecimal')
       .optional()
       .nullable(),
+    photo: z
+      .string()
+      .startsWith('data:image/', 'La foto debe ser una imagen')
+      .max(150_000, 'La foto es demasiado grande')
+      .nullable()
+      .optional(),
     isActive: z.boolean().optional(),
     serviceIds: z.array(z.string()).max(200).optional(),
   })
@@ -94,6 +101,7 @@ professionalRoutes.post('/', async (c) => {
       phone: body.phone ?? null,
       bio: body.bio ?? null,
       color: body.color ?? null,
+      photo: body.photo ?? null,
       isActive: body.isActive ?? true,
       createdAt: now,
       updatedAt: now,

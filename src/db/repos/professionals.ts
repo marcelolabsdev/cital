@@ -11,6 +11,8 @@ export interface ProfessionalRow {
   phone: string | null
   bio: string | null
   color: string | null
+  /** Foto del integrante: data-URL base64 comprimida en el navegador. */
+  photo: string | null
   isActive: boolean
   createdAt: string
   updatedAt: string

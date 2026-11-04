@@ -39,12 +39,18 @@ const onboardingSchema = z
       .min(3, 'El enlace debe tener al menos 3 caracteres')
       .max(48, 'El enlace no puede superar 48 caracteres')
       .optional(),
-    description: z.string().trim().max(300, 'La descripción no puede superar 300 caracteres').optional(),
+    description: z.string().trim().max(300, 'La descripción no puede superar 300 caracteres').optional().nullable(),
     timezone: z.string().optional(),
     onboardingStep: z.number().int().min(1).max(4).optional(),
     brandColor: z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, 'El color debe ser hexadecimal, por ejemplo #4f46e5')
+      .optional(),
+    logoUrl: z
+      .string()
+      .startsWith('data:image/', 'La foto debe ser una imagen')
+      .max(300_000, 'La foto es demasiado grande')
+      .nullable()
       .optional(),
     cancellationPolicyMode: z.enum(['hours', 'no_refund']).optional(),
   })

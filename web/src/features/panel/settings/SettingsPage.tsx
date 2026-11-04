@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react'
+import { Check, Copy, ExternalLink, Loader2, Store, Trash2 } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
+import { compressImage } from '@/lib/compressImage'
 import { useMe } from '@/features/auth/hooks'
 import type { MeResponse, Tenant } from '@/lib/types'
 import { Button } from '@/components/ui/button'
@@ -63,6 +64,8 @@ function SettingsFormPage({ me }: { me: MeResponse }) {
   const qc = useMe()
   const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'ok' | 'taken' | 'invalid'>('idle')
   const [color, setColor] = useState(me.tenant.brandColor)
+  const [logo, setLogo] = useState<string | null>(me.tenant.logoUrl ?? null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const {
     register,
@@ -104,6 +107,15 @@ function SettingsFormPage({ me }: { me: MeResponse }) {
     return () => clearTimeout(t)
   }, [slug, me.tenant.slug])
 
+  async function onPickLogo(file: File | undefined) {
+    if (!file) return
+    try {
+      setLogo(await compressImage(file, 512))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo cargar la imagen')
+    }
+  }
+
   async function onSubmit(data: SettingsForm) {
     if (slugStatus === 'taken' || slugStatus === 'invalid') {
       toast.error('Corrige el enlace público antes de guardar')
@@ -112,7 +124,7 @@ function SettingsFormPage({ me }: { me: MeResponse }) {
     try {
       const res = await api<{ tenant: Tenant }>('/api/panel/onboarding', {
         method: 'PATCH',
-        body: { ...data, description: data.description || null },
+        body: { ...data, description: data.description || null, logoUrl: logo },
       })
       if (qc.data) {
         qc.refetch()
@@ -161,6 +173,46 @@ function SettingsFormPage({ me }: { me: MeResponse }) {
           <Textarea id="st-desc" rows={2} placeholder="Se muestra en tu página de reservas" aria-invalid={!!errors.description} {...register('description')} />
           {errors.description && <p className="text-[13px] text-destructive">{errors.description.message}</p>}
         </div>
+
+        <fieldset className="grid gap-2">
+          <legend className="text-sm font-medium">Foto del negocio</legend>
+          <div className="flex items-center gap-4">
+            <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-muted">
+              {logo ? (
+                <img src={logo} alt="Foto del negocio" className="size-full object-cover" />
+              ) : (
+                <Store className="size-7 text-muted-foreground" />
+              )}
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+                Subir foto
+              </Button>
+              {logo && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => {
+                    setLogo(null)
+                    if (fileRef.current) fileRef.current.value = ''
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                  Quitar
+                </Button>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => void onPickLogo(e.target.files?.[0])}
+              />
+            </div>
+          </div>
+        </fieldset>
 
         <fieldset className="grid gap-2">
           <legend className="text-sm font-medium">Color de marca</legend>
@@ -230,8 +282,21 @@ function SettingsFormPage({ me }: { me: MeResponse }) {
           <CopyBtn text={`/r/${slug}`} />
         </div>
 
+        <div className="mt-1 flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <a
+            href={`/r/${slug}`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground hover:text-foreground"
+          >
+            <ExternalLink className="size-3.5 shrink-0" />
+            <span className="truncate">Ver /r/{slug}</span>
+          </a>
+          <CopyBtn text={`/r/${slug}`} />
+        </div>
+
         <div className="flex justify-end border-t border-border/60 pt-4">
-          <Button type="submit" disabled={!isDirty}>
+          <Button type="submit" disabled={!isDirty && logo === (me.tenant.logoUrl ?? null)}>
             <Check className="size-4" />
             Guardar ajustes
           </Button>

@@ -127,15 +127,21 @@ export function TeamPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    <span
-                      className="flex size-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
-                      style={{
-                        backgroundColor: `${p.color ?? DEFAULT_ENTITY_COLOR}1a`,
-                        color: p.color ?? DEFAULT_ENTITY_COLOR,
-                      }}
-                    >
-                      {initialsOf(p.name)}
-                    </span>
+                    {p.photo ? (
+                      <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full">
+                        <img src={p.photo} alt={`Foto de ${p.name}`} className="size-full object-cover" />
+                      </span>
+                    ) : (
+                      <span
+                        className="flex size-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
+                        style={{
+                          backgroundColor: `${p.color ?? DEFAULT_ENTITY_COLOR}1a`,
+                          color: p.color ?? DEFAULT_ENTITY_COLOR,
+                        }}
+                      >
+                        {initialsOf(p.name)}
+                      </span>
+                    )}
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="truncate font-medium">{p.name}</p>
