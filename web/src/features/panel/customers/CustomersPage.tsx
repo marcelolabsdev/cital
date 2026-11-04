@@ -36,8 +36,8 @@ export function CustomersPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const [page, setPage] = useState(1)
 
-  // Paginación: 8 clientes por página con «Anterior / Siguiente» al final.
-  const PER_PAGE = 8
+  // Paginación: 12 clientes por página con «Anterior / Siguiente» al final.
+  const PER_PAGE = 12
   const totalPages = Math.max(1, Math.ceil((customers?.length ?? 0) / PER_PAGE))
   const currentPage = Math.min(page, totalPages)
   const visible = customers?.slice((currentPage - 1) * PER_PAGE, currentPage * PER_PAGE) ?? []

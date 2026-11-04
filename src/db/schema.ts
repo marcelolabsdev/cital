@@ -78,6 +78,8 @@ export const professionals = sqliteTable(
     phone: text('phone'),
     bio: text('bio'),
     color: text('color'),
+    /** Foto del integrante: data-URL base64 comprimida en el navegador. */
+    photo: text('photo'),
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
